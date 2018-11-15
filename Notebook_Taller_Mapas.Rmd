@@ -1,0 +1,326 @@
+<img src="img\logo_xjur.png" width="25%" height="25%">
+
+---
+title: "Taller de Mapas Interactivos XjuR"
+author: "Antonio Sánchez Chinchón"
+date: '`r format(Sys.Date(), "%d-%B-%Y")`'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Objetivo del taller
+
++ **Duración**: Entre 2 y 2'5 hs.
+
++ **Requisitos previos**: Es un taller introductorio donde no hace falta más que un conocimiento básico de R para instalar y cargar librerías, leer un `csv` y entender la estructura básica de un data frame. Habrá algunos conceptos sencillos de `dplyr` y utilizaremos el operador `%>%` para hacer transformaciones sencillas a los datos.
+
+El objetivo principal es aprender a utilizar la librería `leaflet` de R para hacer mapas interactivos. Empezaremos con mapas muy simples con uno o varios marcadores y terminaremos con mapas que representan fronteras mediante polígonos.
+
+
+### Requerimientos
+
+Para hacer el taller necesitaremos los siguientes paquetes: `opencage`, `leaflet`, `tidyverse`, `htmlwidgets`, `rworldmap`, `sp` y `sf`. Lo primero que haremos es instalar aquellas que no tengamos ya instaladas con el siguiente código:
+
+```{r, eval = FALSE}
+
+paquetes_necesarios <- c("opencage", "leaflet", "tidyverse", 
+                         "htmlwidgets", "rworldmap","sp", "sf")
+
+paquetes_no_instalados <- paquetes_necesarios[!(paquetes_necesarios %in% installed.packages()[,"Package"])]
+
+if(length(paquetes_no_instalados)) install.packages(paquetes_no_instalados)
+
+```
+
+También vamos a necesitar geolocalizar algunos lugares en el mapa. Una buena manera de hacerlo es utilizar [opencage](https://cran.r-project.org/web/packages/opencage/vignettes/opencage.html). Lo primero que tienes que hacer es crear una cuenta gratuita de opencage [aquí](https://opencagedata.com/pricing). Lo siguiente es añadir el API key en el fichero `.Renviron` como una variable de entorno para que no tengas que introducirla manualmente cuando lo uses:
+
+
+```{r, eval=FALSE}
+cat("OPENCAGE_KEY=COPIA-AQUI-TU-API-KEY\n",
+    file = file.path(normalizePath("~/"), ".Renviron"), append = TRUE)
+
+```
+
+Para hacer los mapas vamos a usar [Leaflet](http://leafletjs.com/), una librería de JavaScript que tiene un paquete para R llamado `leaflet` muy bien documentado [en esta página](https://rstudio.github.io/leaflet/).
+
+
+### Pintar un punto
+
+Lo primero que vamos a hacer es pintar un punto en un mapa conocidas sus coordenadas geográficas:
+
+
+```{r, eval=FALSE}
+library(leaflet)
+library(opencage)
+
+sitio <- opencage_forward(placename = "Murcia, Spain", limit = 1)
+
+# Pintamos el mapa
+leaflet() %>% 
+  addTiles() %>% 
+  addMarkers(lng=sitio$results$geometry.lng, 
+             lat=sitio$results$geometry.lat)
+```
+
+Añadimos un popup:
+
+```{r, eval = FALSE}
+leaflet() %>% 
+  addTiles() %>% 
+  addMarkers(lng=sitio$results$geometry.lng, 
+             lat=sitio$results$geometry.lat, 
+             popup="Murcia")
+
+```
+
+### Pintar varios puntos
+
+Para pintar puntos ubicados en un data frame utilizamos el símbolo `~` para referirnos a las columnas en donde están las coordenadas:
+
+```{r, eval = FALSE}
+library(tidyverse)
+
+sitios <- c("Venecia, Italia",
+            "Petra, Jordania",
+            "Taj Mahal, India",
+            "New York, USA",
+            "Pekin, China")
+
+sapply(sitios, function(x) opencage_forward(x, limit=1)$results) %>% 
+  bind_rows() -> coordenadas
+
+coordenadas %>%
+  leaflet() %>%
+  addTiles() %>%
+  addMarkers(lng = ~geometry.lng, 
+             lat = ~geometry.lat)
+```
+
+También podemos utilizar una columna para añadir un popup:
+
+```{r, eval = FALSE}
+coordenadas %>%
+  leaflet() %>%
+  addTiles() %>%
+  addMarkers(lng = ~geometry.lng, 
+             lat = ~geometry.lat,
+             popup = ~formatted)
+
+```
+
+Los popup se pueden hacer más atractivos e informativos con *tags* de `html`:
+
+```{r, eval = FALSE}
+coordenadas %>%
+  leaflet() %>%
+  addTiles() %>%
+  addMarkers(lng = ~geometry.lng, 
+             lat = ~geometry.lat,
+             popup = ~paste0("<b>", formatted, "</b>", 
+                             "<br>",
+                             "<b>Longitud: </b>", geometry.lng, 
+                             "<br>",
+                             "<b>Latitud: </b>", geometry.lat))
+```
+
+Se puede cambiar el mapa base con la función `addProviderTiles`. Si quieres saber rápidamente las opciones posibles, puedes ejecutar `names(providers)` y [aquí](http://leaflet-extras.github.io/leaflet-providers/preview/index.html) tienes información detallada con ejemplos de todos ellos:
+
+```{r, eval = FALSE}
+coordenadas %>%
+  leaflet() %>%
+  addProviderTiles(provider="Esri.WorldImagery") %>% 
+  addMarkers(lng = ~geometry.lng, 
+             lat = ~geometry.lat,
+             popup = ~paste0("<b>", formatted, "</b>", 
+                             "<br>",
+                             "<b>Longitud: </b>", geometry.lng, 
+                             "<br>",
+                             "<b>Latitud: </b>", geometry.lat))
+```
+
+Para guardar en disco el mapa, utilizamos el paquete `htmlwidgets`, aunque lo primero que hacemos es almacenarlo como un objeto de R (lo llamamos `mi_mapa` en nuestro ejemplo):
+
+```{r, eval = FALSE}
+coordenadas %>%
+  leaflet() %>%
+  addProviderTiles(provider="Esri.WorldImagery") %>% 
+  addMarkers(lng = ~geometry.lng, 
+             lat = ~geometry.lat,
+             popup = ~paste0("<b>", formatted, "</b>", 
+                             "<br>",
+                             "<b>Longitud: </b>", geometry.lng, 
+                             "<br>",
+                             "<b>Latitud: </b>", geometry.lat)) -> mi_mapa
+
+library(htmlwidgets)
+saveWidget(mi_mapa, file = "mi_mapa.html")
+
+```
+
+### Ejercicio 1 (15 min.):
+
+**Instrucciones:**
+
+  + Pinta 5 sitios de la tierra que te gustaría visitar
+  + Escoje de mapa base uno distinto a los que hemos elegido hasta ahora
+  + Guarda el mapa en el disco duro
+
+
+### Pintar muchísimos puntos (clustering)
+
+Lo que hemos visto hasta ahora es válido para *pocos* puntos. Si queremos pintar muchos, el mapa puede funcionar mal o ser dificil de entender. Una buena opción es agrupar los puntos. En el siguiente ejemplo, utilizamos la librería `rworldmap` tan solo para generar coordenadas geográficas aleatorias dentro de España:
+
+```{r, eval = FALSE}
+library(rworldmap)
+
+Spain_polyg <- subset(countriesCoarse, ISO3 =="ESP")
+plot(Spain_polyg)
+
+Spain_coord <- spsample(Spain_polyg, 50000, "random") %>% as.data.frame()
+
+Spain_coord %>% 
+  leaflet() %>%
+  addTiles() %>%
+  addCircleMarkers(lng = ~x, 
+                   lat = ~y,
+                   color="blue",
+                   stroke=FALSE,
+                   fillOpacity = 0.8,
+                   clusterOptions = markerClusterOptions())
+
+
+```
+
+
+### Poligonos (librería sp)
+
+En el siguiente ejemplo vamos a trabajar con una estructura de R llamada `SpatialPolygonsDataFrame`, que se puede leer con el paquete sp. Esta es una estuctura compleja que incluye información acerca de las fronteras de los polígonos, la proyección geográfica de los mismos y datos asociados a cada polígono dentro del objeto `@data`.
+
+En la página web de [gadm](http://gadm.org) podemos encontrar archivos RDS con las fronteras de todos los países del mundo en distintos niveles políticos y formato `SpatialPolygonsDataFrame`.
+
+En este ejemplo vamos a hacer un mapa a nivel de Comunidad Autónoma, para lo cual nos vamos a bajar el archivo `gadm36_ESP_1_sp.rds` de [aquí](https://biogeo.ucdavis.edu/data/gadm3.6/Rsp/gadm36_ESP_1_sp.rds).
+
+Los datos de un `SpatialPolygonsDataFrame` se pueden enriquecer con información externa para crear mapas mas informativos. En nuestro caso vamos a colorear las comunidades autónomas con los datos de población del INE, que nos bajamos de [aquí](http://www.ine.es/jaxiT3/Tabla.htm?t=4925&L=0). Elegir las siguientes opciones:
+
+  + **Sexo**: "Ambos sexos"
+  + **Comunidades y ciudades autonomas**: Todas
+  + **Edad**: Total
+  + **Periodo**: 2017
+
+Descargaremos los datos del INE en formato csv separado por `;` y tanto el archivo `rds` como el `csv` lo guardaremos en la carpeta `data` de nuestro *working directory*.
+
+Empezamos cargando el fichero `rds` con el `SpatialPolygonsDataFrame`, echándole un vistazo y arreglándolo un poco:
+
+```{r, eval = FALSE}
+library(sp)
+
+spain <- readRDS("data/gadm36_ESP_1_sp.rds") 
+
+class(spain)
+
+plot(spain)
+
+# Warning: Arreglamos un error
+spain@data[spain@data$NAME_1=="Comunidad de Madrid", 'CC_1'] <- '13'
+spain@data[spain@data$NAME_1=="Aragón", 'CC_1'] <- '03'
+
+```
+
+Leemos los datos que nos hemos decargado del INE:
+
+```{r, eval = FALSE}
+
+poblacion <- read.csv("data/4925sc.csv", 
+                      skip = 8, 
+                      nrows = 19, 
+                      header = FALSE, 
+                      sep =";")
+str(poblacion)
+```
+
+Creamos una variable para poder cruzar el `SpatialPolygonsDataFrame` con los datos del INE. Utilizamos funciones de `dplyr`, que es un paquete para manejo de datos que está dentro de `tidyverse`:
+
+```{r, eval = FALSE}
+
+poblacion %>% 
+  mutate(nombre=str_trim(V1)) %>% 
+  mutate(CC_1 = str_sub(nombre, 1, 2)) %>% 
+  select(CC_1, nombre, poblacion_miles = V2)-> poblacion
+```
+
+Hacemos el join para añadir los datos al `@data`:
+
+```{r, eval = FALSE}
+
+spain@data %>% inner_join(poblacion, by = "CC_1") -> spain@data
+```
+
+Creamos una función para mapear los colores de la variable `poblacion_miles`:
+
+```{r, eval = FALSE}
+
+pal <- colorNumeric(
+  palette = "Blues",
+  domain = spain@data$poblacion_miles)
+```
+
+Pintamos el mapa con los colores de la función `pal`:
+
+```{r, eval = FALSE}
+
+leaflet(spain) %>% 
+  addTiles()  %>% 
+  addPolygons(weight=2, 
+              fillOpacity = 0.8,               
+              color = ~pal(poblacion_miles),
+             popup=~nombre) %>% 
+  addLegend(pal = pal,
+            values = ~poblacion_miles,
+            title = "Poblacion (miles)")
+
+```
+
+### Poligonos (librería sf)
+
+Recientemente ha salido un formato llamado [sf](https://github.com/r-spatial/sf/) más eficiente y más sencillo de utilizar para trabajar con datos datos espaciales. Es como un data frame pero la última columna contiene información de la geometría de cada fila. En gadm nos podemos descargar las fronteras de los países también en este nuevo formato.
+
+
+```{r, eval = FALSE}
+library(sf)
+spain <- readRDS("data/gadm36_ESP_1_sf.rds") 
+```
+
+Arreglamos el `sf` y hacemos el mapa igual que antes:
+
+```{r, eval = FALSE}
+
+# Warning: Arreglamos un error
+spain[spain$NAME_1=="Comunidad de Madrid", 'CC_1'] <- '13'
+spain[spain$NAME_1=="Aragón", 'CC_1'] <- '03'
+
+spain %>% inner_join(poblacion, by = "CC_1") -> spain
+
+pal <- colorNumeric(
+  palette = "Blues",
+  domain = spain$poblacion_miles)
+
+leaflet(spain) %>% 
+  addTiles()  %>% 
+  addPolygons(weight=2, 
+              fillOpacity = 0.8,               
+              color = ~pal(poblacion_miles),
+              popup = ~nombre) %>% 
+  addLegend(pal = pal,
+            values = ~poblacion_miles,
+            title = "Poblacion (miles)")
+
+```
+
+
+### Ejercicio 2 (30 min.)
+
+Representar en un mapa la tasa de paro por comunidad autónoma. Los datos se pueden obtener [aquí](http://www.ine.es/jaxiT3/Tabla.htm?t=4247)
+
