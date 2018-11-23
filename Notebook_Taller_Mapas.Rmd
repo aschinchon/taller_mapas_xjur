@@ -225,7 +225,7 @@ plot(spain)
 
 # Warning: Arreglamos un error
 spain@data[spain@data$NAME_1=="Comunidad de Madrid", 'CC_1'] <- '13'
-spain@data[spain@data$NAME_1=="Aragón", 'CC_1'] <- '03'
+spain@data[spain@data$NAME_1=="Aragón", 'CC_1'] <- '02'
 
 ```
 
